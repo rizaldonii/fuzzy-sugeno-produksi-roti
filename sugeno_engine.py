@@ -1,6 +1,6 @@
 # sugeno_engine.py
 # Orang3 (Rafly) - Sugeno Inference Engine
-# TUGAS: Menjalankan sistem menggunakan Rules dari Shaquille dan Variabel dari Rian
+
 
 import numpy as np
 try:
@@ -26,9 +26,7 @@ except ImportError as e:
 # --- 2. MEMBUAT SISTEM KONTROL (ENGINE) ---
 
 def build_simulation():
-    """
-    Membangun mesin simulasi dengan menggabungkan Rules dan Variabel.
-    """
+    
     if not IMPORTS_OK:
         return None
 
@@ -59,10 +57,7 @@ RANKING_SIMULATION = build_simulation()
 # --- 3. FUNGSI UTAMA (YANG AKAN DIPANGGIL UI) ---
 
 def get_sugeno_score(tlr_val, rpp_val, go_val, oi_val, pr_val):
-    """
-    Fungsi ini dipanggil oleh UI (Orang 4).
-    Menerima 5 angka input -> Mengeluarkan 1 skor fuzzy.
-    """
+
     
     # Cek apakah mesin siap
     if RANKING_SIMULATION is None:
