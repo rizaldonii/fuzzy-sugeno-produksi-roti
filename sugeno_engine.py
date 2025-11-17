@@ -1,219 +1,105 @@
 # sugeno_engine.py
-# Orang3 (Rafly) akan implementasikan inference Sugeno di file ini.
-# Sementara, dummy agar UI tidak error saat di-run.
+# Orang3 (Rafly) - Sugeno Inference Engine
+# TUGAS: Menjalankan sistem menggunakan Rules dari Shaquille dan Variabel dari Rian
+
 import numpy as np
+try:
+    import skfuzzy.control as ctrl
+except ImportError:
+    print("Library scikit-fuzzy belum diinstall.")
 
-# --- 1. MEMANGGIL MEMBERSHIP (Orang 1) ---
-# Menggunakan fungsi keanggotaan segitiga (trimf) karena sederhana dan umum.
-# Untuk Sugeno, output (konsekuen) adalah konstanta atau fungsi linear,
-# dalam kasus ini kita asumsikan sebagai konstanta (level 1, 2, 3, 4, 5).
-
-def trimf(x, a, b, c):
-    """Fungsi Keanggotaan Segitiga (Triangular Membership Function)"""
-    return np.maximum(0, np.minimum((x - a) / (b - a), (c - x) / (c - b)))
-
-def get_membership(value):
-    """Menghitung nilai keanggotaan untuk semua 5 input pada 3 level (1, 2, 3)"""
+# --- 1. IMPORT DARI TEMAN TIM ---
+try:
+    # Mengambil Rule yang sudah dibuat Shaquille (Orang 2)
+    from fuzzy_rules import load_all_rules
+    # Mengambil Variabel Input/Output yang sudah dibuat Rian (Orang 1)
+    # (Kita butuh output 'consequent' untuk defuzzification Sugeno manual jika perlu,
+    # tapi scikit-fuzzy biasanya menangani Mamdani. Untuk Sugeno murni di skfuzzy
+    # agak tricky, tapi ini cara standard integrasinya).
+    from fuzzy_variables import antecedents, consequent
     
-    # Asumsi range input adalah [0, 100] dan MFs tumpang tindih secara simetris.
-    # Level 1: Rendah (Low), Level 2: Sedang (Medium), Level 3: Tinggi (High)
-    
-    # Definisi MFs (a, b, c):
-    mf_low = lambda x: trimf(x, 0, 0, 50)
-    mf_medium = lambda x: trimf(x, 0, 50, 100)
-    mf_high = lambda x: trimf(x, 50, 100, 100)
-    
-    # Mengembalikan dict of dicts untuk mempermudah akses
-    mf_values = {}
-    for input_name, x in value.items():
-        mf_values[input_name] = {
-            1: mf_low(x),     # Level 1 (Low)
-            2: mf_medium(x),  # Level 2 (Medium)
-            3: mf_high(x)     # Level 3 (High)
-        }
-    return mf_values
+    IMPORTS_OK = True
+except ImportError as e:
+    print(f"ERROR: Gagal import file teman. {e}")
+    IMPORTS_OK = False
 
-# --- 2. MEMANGGIL RULES (Orang 2) & GENERATOR OTOMATIS RULE ---
+# --- 2. MEMBUAT SISTEM KONTROL (ENGINE) ---
 
-def generate_rules():
+def build_simulation():
     """
-    Membuat generator otomatis rule Sugeno berdasarkan pola Table 3:
-    5 input, 3 level per input -> 3^5 = 243 kombinasi.
-    Output (konsekuen) diasumsikan sebagai level 1 hingga 5, 
-    di mana 1 adalah terburuk dan 5 adalah terbaik.
-    
-    Asumsi untuk penentuan 'out' (dapat disesuaikan):
-    out = (tlr + rpp + go + oi + pr) / 5 (lalu dibulatkan)
-    
-    Karena level input adalah 1, 2, 3, total minimum adalah 5 (1*5) dan 
-    maksimum adalah 15 (3*5). Kita petakan ke level output 1-5.
-    
-    * Total 5-7  -> Output 1 (Worst)
-    * Total 8-9  -> Output 2
-    * Total 10   -> Output 3 (Medium)
-    * Total 11-12 -> Output 4
-    * Total 13-15 -> Output 5 (Best)
+    Membangun mesin simulasi dengan menggabungkan Rules dan Variabel.
     """
+    if not IMPORTS_OK:
+        return None
+
+    print("[Sugeno Engine]: Memuat aturan dari Shaquille...")
+    # 1. Ambil rules dari Shaquille
+    rules_list = load_all_rules()
     
-    rules = []
-    levels = [1, 2, 3] # Level input: Low, Medium, High
+    if not rules_list:
+        print("ERROR: Tidak ada rule yang dimuat.")
+        return None
+
+    print(f"[Sugeno Engine]: Berhasil memuat {len(rules_list)} aturan.")
+    print("[Sugeno Engine]: Membangun ControlSystem...")
+
+    # 2. Buat Control System
+    # Ini akan menggabungkan input Rian + Rules Shaquille menjadi satu otak
+    ranking_ctrl = ctrl.ControlSystem(rules_list)
     
-    for tlr in levels:
-        for rpp in levels:
-            for go in levels:
-                for oi in levels:
-                    for pr in levels:
-                        # Menentukan output berdasarkan jumlah level input (Sederhana)
-                        total_level = tlr + rpp + go + oi + pr
-                        
-                        if total_level <= 7:
-                            out = 1
-                        elif total_level <= 9:
-                            out = 2
-                        elif total_level == 10:
-                            out = 3
-                        elif total_level <= 12:
-                            out = 4
-                        else: # total_level >= 13
-                            out = 5
-                            
-                        rule = {
-                            "tlr": tlr, "rpp": rpp, "go": go, "oi": oi, "pr": pr, "out": out
-                        }
-                        rules.append(rule)
-                        
-    return rules
+    # 3. Buat Simulasi (Ini yang akan dipakai untuk menghitung)
+    simulation = ctrl.ControlSystemSimulation(ranking_ctrl)
+    
+    return simulation
 
-def get_rules():
-    """Menyediakan fungsi untuk dipakai inference"""
-    return generate_rules()
+# Inisialisasi simulasi SEKALI saja agar cepat
+# (Global variable untuk menampung mesin yang sudah jadi)
+RANKING_SIMULATION = build_simulation()
 
-# Inisialisasi rules hanya sekali
-RULES = get_rules()
+# --- 3. FUNGSI UTAMA (YANG AKAN DIPANGGIL UI) ---
 
-# --- 3. MENGHITUNG FIRING STRENGTH RULE SUGENO ---
-
-def calculate_firing_strength(mf_values, rule):
+def get_sugeno_score(tlr_val, rpp_val, go_val, oi_val, pr_val):
     """
-    Menghitung Firing Strength (alfa) untuk satu rule Sugeno.
-    Menggunakan operasi MIN (T-Norm) pada semua nilai keanggotaan anteseden.
+    Fungsi ini dipanggil oleh UI (Orang 4).
+    Menerima 5 angka input -> Mengeluarkan 1 skor fuzzy.
     """
     
-    # Mendapatkan nilai keanggotaan untuk kondisi anteseden (IF part) dari rule
-    strength_tlr = mf_values['tlr'][rule['tlr']]
-    strength_rpp = mf_values['rpp'][rule['rpp']]
-    strength_go = mf_values['go'][rule['go']]
-    strength_oi = mf_values['oi'][rule['oi']]
-    strength_pr = mf_values['pr'][rule['pr']]
-    
-    # Firing Strength (alfa) adalah nilai minimum dari semua kekuatan anteseden (MIN operator)
-    firing_strength = min(
-        strength_tlr,
-        strength_rpp,
-        strength_go,
-        strength_oi,
-        strength_pr
-    )
-    
-    # Untuk Sugeno ordo nol, z adalah output konstanta (rule['out'])
-    z = rule['out']
-    
-    return firing_strength, z
+    # Cek apakah mesin siap
+    if RANKING_SIMULATION is None:
+        return 0.0 # Kembalikan 0 jika sistem error
 
-# --- 4. WEIGHTED AVERAGE OUTPUT ---
+    try:
+        # 1. Masukkan Input ke Mesin
+        # Pastikan nama string ('TLR', dll) SAMA PERSIS dengan label di fuzzy_variables.py milik Rian
+        # Asumsi Rian memberi label input sebagai: 'TLR', 'RPP', 'GO', 'OI', 'PR'
+        RANKING_SIMULATION.input['TLR'] = tlr_val
+        RANKING_SIMULATION.input['RPP'] = rpp_val
+        RANKING_SIMULATION.input['GO']  = go_val
+        RANKING_SIMULATION.input['OI']  = oi_val
+        RANKING_SIMULATION.input['PR']  = pr_val
 
-def weighted_average_defuzzification(results):
-    """
-    Menghitung skor akhir menggunakan metode Weighted Average Defuzzification.
-    Skor = Sigma(alfa_i * z_i) / Sigma(alfa_i)
-    """
-    
-    numerator = 0  # Sigma(alfa_i * z_i)
-    denominator = 0  # Sigma(alfa_i)
-    
-    for firing_strength, z in results:
-        numerator += firing_strength * z
-        denominator += firing_strength
+        # 2. Jalankan Perhitungan (Crunch the numbers!)
+        # Di sinilah Firing Strength & Weighted Average dihitung otomatis oleh library
+        RANKING_SIMULATION.compute()
+
+        # 3. Ambil Hasilnya
+        # Asumsi Rian memberi label output sebagai: 'Score'
+        final_score = RANKING_SIMULATION.output['Score']
         
-    if denominator == 0:
-        # Jika tidak ada rule yang terpicu, kembalikan skor default atau NaN
+        return final_score
+
+    except Exception as e:
+        print(f"ERROR saat menghitung skor: {e}")
         return 0.0
-        
-    final_score = numerator / denominator
-    return final_score
 
-# --- 5. MENYEDIAKAN FUNGSI FINAL ---
-
-def get_sugeno_score(tlr, rpp, go, oi, pr):
-    """
-    Fungsi utama untuk menghitung skor Sugeno
+# --- TESTING MANDIRI (Agar Rafly bisa tes tanpa UI) ---
+if __name__ == "__main__":
+    print("\n--- Test Sugeno Engine ---")
+    # Tes dengan data IITM (Juara 1) dari Table 4
+    # Input: 84.57, 83.54, 87.13, 66.08, 94.14
+    test_score = get_sugeno_score(84.57, 83.54, 87.13, 66.08, 94.14)
+    print(f"Input Data IITM -> Output Skor: {test_score}")
     
-    Args:
-        tlr (float): Teaching, Learning and Resources
-        rpp (float): Research and Professional Practice
-        go (float): Graduation Outcomes
-        oi (float): Outreach and Inclusivity
-        pr (float): Perception
-        
-    Returns:
-        float: Skor akhir Sugeno (antara 1 dan 5, atau lebih luas)
-    """
-    
-    # 1. Mengumpulkan input
-    input_values = {
-        "tlr": tlr, "rpp": rpp, "go": go, "oi": oi, "pr": pr
-    }
-    
-    # 2. Fuzzifikasi: Hitung nilai keanggotaan untuk input
-    mf_values = get_membership(input_values)
-    
-    # 3. Inferensi: Hitung firing strength dan output (z) untuk setiap rule
-    rule_results = []
-    
-    for rule in RULES:
-        firing_strength, z = calculate_firing_strength(mf_values, rule)
-        rule_results.append((firing_strength, z))
-        
-    # 4. Defuzzifikasi: Hitung skor akhir menggunakan Weighted Average
-    final_score = weighted_average_defuzzification(rule_results)
-    
-    return final_score
-
-# --- CONTOH PENGGUNAAN ---
-print(f"Total Rules yang Dibuat: {len(RULES)}") # Harusnya 243
-
-# Contoh Kasus 1: Semua input di nilai 75 (Medium-High)
-# Asumsi: input di range [0, 100]
-tlr = 75
-rpp = 75
-go = 75
-oi = 75
-pr = 75
-
-score_1 = get_sugeno_score(tlr, rpp, go, oi, pr)
-print(f"\nSkor Sugeno (Input 75, 75, 75, 75, 75): {score_1:.4f}") 
-# Hasil harus mendekati 4 atau 5
-
-# Contoh Kasus 2: Semua input di nilai 25 (Low-Medium)
-tlr = 25
-rpp = 25
-go = 25
-oi = 25
-pr = 25
-
-score_2 = get_sugeno_score(tlr, rpp, go, oi, pr)
-print(f"Skor Sugeno (Input 25, 25, 25, 25, 25): {score_2:.4f}")
-# Hasil harus mendekati 2
-
-# Contoh Kasus 3: Campuran
-tlr = 80 # High
-rpp = 10 # Low
-go = 50 # Medium
-oi = 90 # High
-pr = 40 # Low-Medium
-
-score_3 = get_sugeno_score(tlr, rpp, go, oi, pr)
-print(f"Skor Sugeno (Input Campuran): {score_3:.4f}")
-def get_sugeno_score(tlr, rpp, go, oi, pr):
-    # placeholder simple — akan diganti oleh implementasi sesungguhnya
-    return (tlr + rpp + go + oi + pr) / 5
+    # Tes data rendah
+    test_score_low = get_sugeno_score(10, 10, 10, 10, 10)
+    print(f"Input Data Rendah -> Output Skor: {test_score_low}")
