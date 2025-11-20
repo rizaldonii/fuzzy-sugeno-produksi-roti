@@ -1,100 +1,77 @@
 # sugeno_engine.py
-# Orang3 (Rafly) - Sugeno Inference Engine
+"""
+Sugeno engine (manual) - menghitung skor dengan metode Weighted Average.
+Menggunakan:
+- fuzzify_inputs(...) dari fuzzy_variables
+- rules list dari fuzzy_rules.load_all_rules()
+
+Setiap rule: consequent adalah konstanta sesuai LEVEL_OUTPUT_VALUE mapping.
+Firing strength rule = min(μ_i untuk tiap antecedent sesuai rule).
+Output = sum(w_i * z_i) / sum(w_i)
+"""
+
+from typing import Dict
+from fuzzy_variables import fuzzify_inputs
+from fuzzy_rules import load_all_rules
+
+# Mapping level -> crisp output value untuk Sugeno
+# Pilihan default: 1 -> 0, 2 -> 50, 3 -> 100  (editable)
+LEVEL_OUTPUT_VALUE = {
+    1: 0.0,
+    2: 50.0,
+    3: 100.0,
+}
+
+def get_sugeno_score(tlr_val: float, rpp_val: float, go_val: float, oi_val: float, pr_val: float) -> float:
+    """
+    Hitung skor Sugeno untuk satu baris input.
+    """
+    # 1) fuzzify inputs -> dict nama -> {term: μ}
+    fuzz = fuzzify_inputs(tlr_val, rpp_val, go_val, oi_val, pr_val)
+
+    # 2) load rules (list of dict)
+    rules = load_all_rules()
+    if not rules:
+        raise RuntimeError("No rules loaded. Pastikan fuzzy_rules.load_all_rules() bekerja.")
+
+    numerator = 0.0
+    denominator = 0.0
+
+    # helper mapping level int -> term name lowercase
+    level_to_term = {1: "low", 2: "medium", 3: "high"}
+
+    for r in rules:
+        # untuk tiap rule ambil derajat keanggotaan yang sesuai
+        mu_tlr = fuzz["tlr"].get(level_to_term[r["tlr"]], 0.0)
+        mu_rpp = fuzz["rpp"].get(level_to_term[r["rpp"]], 0.0)
+        mu_go  = fuzz["go"].get(level_to_term[r["go"]], 0.0)
+        mu_oi  = fuzz["oi"].get(level_to_term[r["oi"]], 0.0)
+        mu_pr  = fuzz["pr"].get(level_to_term[r["pr"]], 0.0)
+
+        # firing strength = MIN dari semua antecedent μ
+        firing_strength = min(mu_tlr, mu_rpp, mu_go, mu_oi, mu_pr)
+
+        if firing_strength <= 0.0:
+            continue  # rule tidak aktif, skip
+
+        # consequent crisp value (z)
+        z = LEVEL_OUTPUT_VALUE.get(r["out"], 0.0)
+
+        numerator += firing_strength * z
+        denominator += firing_strength
+
+    if denominator == 0.0:
+        # tidak ada rule aktif: fallback (mis: rata-rata input)
+        return (tlr_val + rpp_val + go_val + oi_val + pr_val) / 5.0
+
+    score = numerator / denominator
+    return float(score)
 
 
-import numpy as np
-try:
-    import skfuzzy.control as ctrl
-except ImportError:
-    print("Library scikit-fuzzy belum diinstall.")
-
-# --- 1. IMPORT DARI TEMAN TIM ---
-try:
-    # Mengambil Rule yang sudah dibuat Shaquille (Orang 2)
-    from fuzzy_rules import load_all_rules
-    # Mengambil Variabel Input/Output yang sudah dibuat Rian (Orang 1)
-    # (Kita butuh output 'consequent' untuk defuzzification Sugeno manual jika perlu,
-    # tapi scikit-fuzzy biasanya menangani Mamdani. Untuk Sugeno murni di skfuzzy
-    # agak tricky, tapi ini cara standard integrasinya).
-    from fuzzy_variables import antecedents, consequent
-    
-    IMPORTS_OK = True
-except ImportError as e:
-    print(f"ERROR: Gagal import file teman. {e}")
-    IMPORTS_OK = False
-
-# --- 2. MEMBUAT SISTEM KONTROL (ENGINE) ---
-
-def build_simulation():
-    
-    if not IMPORTS_OK:
-        return None
-
-    print("[Sugeno Engine]: Memuat aturan dari Shaquille...")
-    # 1. Ambil rules dari Shaquille
-    rules_list = load_all_rules()
-    
-    if not rules_list:
-        print("ERROR: Tidak ada rule yang dimuat.")
-        return None
-
-    print(f"[Sugeno Engine]: Berhasil memuat {len(rules_list)} aturan.")
-    print("[Sugeno Engine]: Membangun ControlSystem...")
-
-    # 2. Buat Control System
-    # Ini akan menggabungkan input Rian + Rules Shaquille menjadi satu otak
-    ranking_ctrl = ctrl.ControlSystem(rules_list)
-    
-    # 3. Buat Simulasi (Ini yang akan dipakai untuk menghitung)
-    simulation = ctrl.ControlSystemSimulation(ranking_ctrl)
-    
-    return simulation
-
-# Inisialisasi simulasi SEKALI saja agar cepat
-# (Global variable untuk menampung mesin yang sudah jadi)
-RANKING_SIMULATION = build_simulation()
-
-# --- 3. FUNGSI UTAMA (YANG AKAN DIPANGGIL UI) ---
-
-def get_sugeno_score(tlr_val, rpp_val, go_val, oi_val, pr_val):
-
-    
-    # Cek apakah mesin siap
-    if RANKING_SIMULATION is None:
-        return 0.0 # Kembalikan 0 jika sistem error
-
-    try:
-        # 1. Masukkan Input ke Mesin
-        # Pastikan nama string ('TLR', dll) SAMA PERSIS dengan label di fuzzy_variables.py milik Rian
-        # Asumsi Rian memberi label input sebagai: 'TLR', 'RPP', 'GO', 'OI', 'PR'
-        RANKING_SIMULATION.input['TLR'] = tlr_val
-        RANKING_SIMULATION.input['RPP'] = rpp_val
-        RANKING_SIMULATION.input['GO']  = go_val
-        RANKING_SIMULATION.input['OI']  = oi_val
-        RANKING_SIMULATION.input['PR']  = pr_val
-
-        # 2. Jalankan Perhitungan (Crunch the numbers!)
-        # Di sinilah Firing Strength & Weighted Average dihitung otomatis oleh library
-        RANKING_SIMULATION.compute()
-
-        # 3. Ambil Hasilnya
-        # Asumsi Rian memberi label output sebagai: 'Score'
-        final_score = RANKING_SIMULATION.output['Score']
-        
-        return final_score
-
-    except Exception as e:
-        print(f"ERROR saat menghitung skor: {e}")
-        return 0.0
-
-# --- TESTING MANDIRI (Agar Rafly bisa tes tanpa UI) ---
+# -- Optional: quick test when run directly
 if __name__ == "__main__":
-    print("\n--- Test Sugeno Engine ---")
-    # Tes dengan data IITM (Juara 1) dari Table 4
-    # Input: 84.57, 83.54, 87.13, 66.08, 94.14
-    test_score = get_sugeno_score(84.57, 83.54, 87.13, 66.08, 94.14)
-    print(f"Input Data IITM -> Output Skor: {test_score}")
-    
-    # Tes data rendah
-    test_score_low = get_sugeno_score(10, 10, 10, 10, 10)
-    print(f"Input Data Rendah -> Output Skor: {test_score_low}")
+    # contoh: IITM dari tabel paper
+    s = get_sugeno_score(84.57, 83.54, 87.13, 66.08, 94.14)
+    print("Sugeno score (IITM sample):", s)
+    s2 = get_sugeno_score(10,10,10,10,10)
+    print("Low sample:", s2)
