@@ -1,76 +1,40 @@
+# fuzzy_variables.py
 """
-Variabel fuzzy + helper fuzzification.
-Nama term: 'low', 'medium', 'high' (lowercase!)
+Membership functions (Table 2):
+ Low  = (-40, 0, 40)
+ Med  = (10, 50, 90)
+ High = (60, 100, 140)
 """
-from dataclasses import dataclass
-from typing import Dict
+
+from typing import Dict, Tuple
 import numpy as np
-import skfuzzy as fuzz
-from skfuzzy import control as ctrl
 
-# Universe (0..100)
-UNIVERSE_MIN = 0.0
-UNIVERSE_MAX = 100.0
-UNIVERSE_STEP = 0.5
-INPUT_UNIVERSE = np.arange(UNIVERSE_MIN, UNIVERSE_MAX + UNIVERSE_STEP, UNIVERSE_STEP)
+LOW_TRI = (-40.0, 0.0, 40.0)
+MED_TRI = (10.0, 50.0, 90.0)
+HIGH_TRI = (60.0, 100.0, 140.0)
 
-@dataclass(frozen=True)
-class MembershipConfig:
-    low: tuple
-    medium: tuple
-    high: tuple
+def trimf_scalar(x: float, abc: Tuple[float, float, float]) -> float:
+    a, b, c = abc
+    if x <= a or x >= c:
+        return 0.0
+    if x == b:
+        return 1.0
+    if a < x < b:
+        return (x - a) / (b - a)
+    return (c - x) / (c - b)
 
-# Konfigurasi triangular (bisa disesuaikan jika ingin match paper lebih ketat)
-DEFAULT_MEMBERSHIP_CONFIG = MembershipConfig(
-    low=(UNIVERSE_MIN, UNIVERSE_MIN, 50.0),
-    medium=(25.0, 50.0, 75.0),
-    high=(50.0, UNIVERSE_MAX, UNIVERSE_MAX),
-)
-
-# Helper untuk membuat Antecedent dengan term 'low','medium','high'
-def _create_input_variable(name: str, universe=INPUT_UNIVERSE, config=DEFAULT_MEMBERSHIP_CONFIG):
-    var = ctrl.Antecedent(universe, name)
-    var['low'] = fuzz.trimf(universe, config.low)
-    var['medium'] = fuzz.trimf(universe, config.medium)
-    var['high'] = fuzz.trimf(universe, config.high)
-    return var
-
-# Buat variabel input
-TLR = _create_input_variable("tlr")
-RPP = _create_input_variable("rpp")
-GO  = _create_input_variable("go")
-OI  = _create_input_variable("oi")
-PR  = _create_input_variable("pr")
-
-# Kumpulan untuk akses
-INPUT_VARIABLES = {
-    "tlr": TLR,
-    "rpp": RPP,
-    "go": GO,
-    "oi": OI,
-    "pr": PR,
-}
-
-# Untuk kompatibilitas dengan modul rule loader sebelumnya:
-antecedents = (TLR, RPP, GO, OI, PR)
-
-# --- Fuzzification helpers (dipakai engine Sugeno) ---
-def fuzzify_single_input(variable: ctrl.Antecedent, value: float):
-    """Return dict term -> μ (float) untuk satu variabel."""
-    universe = variable.universe
-    degrees = {}
-    # setiap term di variable.terms (dict)
-    for term_name, term_obj in variable.terms.items():
-        mu = fuzz.interp_membership(universe, term_obj.mf, value)
-        degrees[term_name] = float(mu)
-    return degrees
-
-def fuzzify_inputs(tlr: float, rpp: float, go: float, oi: float, pr: float):
-    """Kembalikan dict nama_input -> {term: degree}"""
+def fuzzify_value(value: float) -> Dict[str, float]:
     return {
-        "tlr": fuzzify_single_input(TLR, tlr),
-        "rpp": fuzzify_single_input(RPP, rpp),
-        "go":  fuzzify_single_input(GO, go),
-        "oi":  fuzzify_single_input(OI, oi),
-        "pr":  fuzzify_single_input(PR, pr),
+        "low": trimf_scalar(value, LOW_TRI),
+        "medium": trimf_scalar(value, MED_TRI),
+        "high": trimf_scalar(value, HIGH_TRI),
+    }
+
+def fuzzify_inputs(tlr, rpp, go, oi, pr):
+    return {
+        "tlr": fuzzify_value(tlr),
+        "rpp": fuzzify_value(rpp),
+        "go":  fuzzify_value(go),
+        "oi":  fuzzify_value(oi),
+        "pr":  fuzzify_value(pr),
     }
