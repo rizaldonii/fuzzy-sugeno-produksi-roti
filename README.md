@@ -11,5 +11,5 @@ Project untuk demo Sugeno fuzzy ranking.
 2. Install dependencies:
    - `pip install -r requirements.txt`
 3. Jalankan:
-   - `streamlit run web_app.py`
+   - `streamlit run app.py`
 
