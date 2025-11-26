@@ -1,5 +1,3 @@
-numpy
-scikit-fuzzy
 streamlit
-matplotlib
-networkx
+numpy
+pandas
