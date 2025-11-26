@@ -3,22 +3,22 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# --- KONFIGURASI HALAMAN ---
+# --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(
     page_title="Sistem Fuzzy Sugeno - Roti Ganda",
     page_icon="🍞",
-    layout="centered"
+    layout="wide" # Layout lebar agar grafik terlihat jelas
 )
 
-# --- CSS UNTUK UI MODERN & BERSIH ---
+# --- 2. CSS UNTUK PERCANTIK TAMPILAN ---
 st.markdown("""
 <style>
     .result-card {
-        background-color: #f8f9fa;
+        background-color: #f0f2f6;
         border-radius: 10px;
         padding: 20px;
         text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border: 1px solid #d1d5db;
         margin-bottom: 20px;
     }
     .result-value {
@@ -28,26 +28,25 @@ st.markdown("""
     }
     .result-label {
         font-size: 18px;
-        color: #666;
+        color: #333;
+        font-weight: 500;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- FUNGSI KEANGGOTAAN (MEMBERSHIP FUNCTIONS) ---
-# Referensi fungsi trapesium dan segitiga [cite: 116, 123]
+# --- 3. FUNGSI LOGIKA FUZZY (MEMBERSHIP FUNCTIONS) ---
 
 def trapmf(x, p):
-    """Fungsi Keanggotaan Trapesium: p = [a, b, c, d]"""
+    """Fungsi Trapesium"""
     return np.maximum(0, np.minimum(np.minimum((x - p[0]) / (p[1] - p[0]), 1), (p[3] - x) / (p[3] - p[2])))
 
 def trimf(x, p):
-    """Fungsi Keanggotaan Segitiga: p = [a, b, c]"""
+    """Fungsi Segitiga"""
     return np.maximum(0, np.minimum((x - p[0]) / (p[1] - p[0]), (p[2] - x) / (p[2] - p[1])))
 
-# --- DEFINISI VARIABEL FUZZY ---
-# Parameter diambil persis dari Paper Halaman 6-7 [cite: 201, 209, 210]
+# --- 4. DEFINISI VARIABEL (FUZZIFIKASI) ---
+# Parameter diambil persis dari Paper Halaman 6-7
 
-# 1. Variabel Input: PERMINTAAN (Demand)
 def fuzzify_permintaan(x):
     # KECIL: Trapmf [778, 975, 1030, 1310]
     u_kecil = trapmf(x, [778, 975, 1030, 1310])
@@ -57,7 +56,6 @@ def fuzzify_permintaan(x):
     u_besar = trapmf(x, [1310, 1589, 1695, 1796])
     return u_kecil, u_sedang, u_besar
 
-# 2. Variabel Input: PERSEDIAAN (Supply)
 def fuzzify_persediaan(x):
     # SEDIKIT: Trapmf [492, 588, 607, 750]
     u_sedikit = trapmf(x, [492, 588, 607, 750])
@@ -67,243 +65,196 @@ def fuzzify_persediaan(x):
     u_banyak = trapmf(x, [750, 894, 912, 1008])
     return u_sedikit, u_sedang, u_banyak
 
+# Fungsi Bantuan: Membuat Rumus LaTeX untuk Penjelasan (LENGKAP)
 def get_formula_latex(x, p, label):
-    """
-    Menghasilkan string LaTeX berdasarkan posisi x pada kurva.
-    p: list parameter [a, b, c] atau [a, b, c, d]
-    label: nama himpunan (misal: 'Sedikit')
-    """
-    # Cek Trapesium (4 parameter)
-    if len(p) == 4:
+    if len(p) == 4: # Trapesium
         a, b, c, d = p
-        if x <= a or x >= d:
-            return f"\\mu_{{{label}}}({x}) = 0 \\quad (Di luar range)"
-        elif b <= x <= c:
-            return f"\\mu_{{{label}}}({x}) = 1 \\quad (Di area puncak)"
-        elif a < x < b:
-            val = (x - a) / (b - a)
-            return f"\\mu_{{{label}}}({x}) = \\frac{{x - {a}}}{{{b} - {a}}} = \\frac{{{x - a}}}{{{b - a}}} = {val:.4f}"
-        elif c < x < d:
-            val = (d - x) / (d - c)
-            return f"\\mu_{{{label}}}({x}) = \\frac{{{d} - x}}{{{d} - {c}}} = \\frac{{{d - x}}}{{{d - c}}} = {val:.4f}"
+        if x <= a or x >= d: 
+            return f"\\mu_{{{label}}} = 0 \\quad \\text{{(Di luar range)}}"
+        elif b <= x <= c: 
+            return f"\\mu_{{{label}}} = 1 \\quad \\text{{(Di area puncak)}}"
+        elif a < x < b: 
+            return f"\\mu_{{{label}}} = {(x-a)/(b-a):.4f} \\quad \\text{{(Lereng Naik)}}"
+        elif c < x < d: 
+            return f"\\mu_{{{label}}} = {(d-x)/(d-c):.4f} \\quad \\text{{(Lereng Turun)}}"
             
-    # Cek Segitiga (3 parameter)
-    elif len(p) == 3:
+    elif len(p) == 3: # Segitiga
         a, b, c = p
-        if x <= a or x >= c:
-            return f"\\mu_{{{label}}}({x}) = 0 \\quad (Di luar range)"
-        elif x == b:
-            return f"\\mu_{{{label}}}({x}) = 1 \\quad (Tepat di puncak)"
-        elif a < x < b:
-            val = (x - a) / (b - a)
-            return f"\\mu_{{{label}}}({x}) = \\frac{{x - {a}}}{{{b} - {a}}} = \\frac{{{x - a}}}{{{b - a}}} = {val:.4f}"
-        elif b < x < c:
-            val = (c - x) / (c - b)
-            return f"\\mu_{{{label}}}({x}) = \\frac{{{c} - x}}{{{c} - {b}}} = \\frac{{{c - x}}}{{{c - b}}} = {val:.4f}"
-            
-    return "Error parsing formula"
+        if x <= a or x >= c: 
+            return f"\\mu_{{{label}}} = 0 \\quad \\text{{(Di luar range)}}"
+        elif x == b: 
+            return f"\\mu_{{{label}}} = 1 \\quad \\text{{(Tepat di puncak)}}"
+        elif a < x < b: 
+            return f"\\mu_{{{label}}} = {(x-a)/(b-a):.4f} \\quad \\text{{(Lereng Naik)}}"
+        elif b < x < c: 
+            return f"\\mu_{{{label}}} = {(c-x)/(c-b):.4f} \\quad \\text{{(Lereng Turun)}}"
+    return "Error"
 
-# 3. Variabel Output: PRODUKSI (Konstanta Sugeno)
-# 
+# Konstanta Output Sugeno
 Z_SEDIKIT = 1996
 Z_SEDANG = 2275
 Z_BANYAK = 2579
 
-# --- LOGIKA UTAMA (INFERENSI & DEFUZZIFIKASI) ---
-
+# --- 5. LOGIKA UTAMA (INFERENSI) ---
 def calculate_fuzzy_sugeno(in_minta, in_sedia):
     # 1. Fuzzifikasi
     pm_kecil, pm_sedang, pm_besar = fuzzify_permintaan(in_minta)
     ps_sedikit, ps_sedang, ps_banyak = fuzzify_persediaan(in_sedia)
 
-    # 2. Inferensi (Rule Evaluation)
-    # Berdasarkan Tabel 4 
-    # Operator yang digunakan adalah MIN (AND) [cite: 156]
-    
+    # 2. Inferensi (Rule Evaluation - Operator MIN)
     rules = []
     
-    # Rule 1: IF Minta KECIL & Sedia SEDIKIT -> Produksi SEDIKIT
-    a1 = min(pm_kecil, ps_sedikit); z1 = Z_SEDIKIT
-    rules.append({"Rule": 1, "Alpha": a1, "Z": z1, "Ket": "Kecil & Sedikit -> Sedikit"})
+    # Rule 1-3 (Minta KECIL)
+    rules.append({"Rule": 1, "Alpha": min(pm_kecil, ps_sedikit), "Z": Z_SEDIKIT, "Ket": "Kecil & Sedikit -> Sedikit"})
+    rules.append({"Rule": 2, "Alpha": min(pm_kecil, ps_sedang), "Z": Z_SEDIKIT, "Ket": "Kecil & Sedang -> Sedikit"})
+    rules.append({"Rule": 3, "Alpha": min(pm_kecil, ps_banyak), "Z": Z_SEDIKIT, "Ket": "Kecil & Banyak -> Sedikit"})
     
-    # Rule 2: IF Minta KECIL & Sedia SEDANG -> Produksi SEDIKIT
-    a2 = min(pm_kecil, ps_sedang); z2 = Z_SEDIKIT
-    rules.append({"Rule": 2, "Alpha": a2, "Z": z2, "Ket": "Kecil & Sedang -> Sedikit"})
+    # Rule 4-6 (Minta SEDANG)
+    rules.append({"Rule": 4, "Alpha": min(pm_sedang, ps_sedikit), "Z": Z_SEDIKIT, "Ket": "Sedang & Sedikit -> Sedikit"})
+    rules.append({"Rule": 5, "Alpha": min(pm_sedang, ps_sedang), "Z": Z_SEDANG, "Ket": "Sedang & Sedang -> Sedang"})
+    rules.append({"Rule": 6, "Alpha": min(pm_sedang, ps_banyak), "Z": Z_SEDANG, "Ket": "Sedang & Banyak -> Sedang"})
     
-    # Rule 3: IF Minta KECIL & Sedia BANYAK -> Produksi SEDIKIT
-    a3 = min(pm_kecil, ps_banyak); z3 = Z_SEDIKIT
-    rules.append({"Rule": 3, "Alpha": a3, "Z": z3, "Ket": "Kecil & Banyak -> Sedikit"})
-    
-    # Rule 4: IF Minta SEDANG & Sedia SEDIKIT -> Produksi SEDIKIT
-    a4 = min(pm_sedang, ps_sedikit); z4 = Z_SEDIKIT
-    rules.append({"Rule": 4, "Alpha": a4, "Z": z4, "Ket": "Sedang & Sedikit -> Sedikit"})
-    
-    # Rule 5: IF Minta SEDANG & Sedia SEDANG -> Produksi SEDANG
-    a5 = min(pm_sedang, ps_sedang); z5 = Z_SEDANG
-    rules.append({"Rule": 5, "Alpha": a5, "Z": z5, "Ket": "Sedang & Sedang -> Sedang"})
-    
-    # Rule 6: IF Minta SEDANG & Sedia BANYAK -> Produksi SEDANG
-    a6 = min(pm_sedang, ps_banyak); z6 = Z_SEDANG
-    rules.append({"Rule": 6, "Alpha": a6, "Z": z6, "Ket": "Sedang & Banyak -> Sedang"})
-    
-    # Rule 7: IF Minta BESAR & Sedia SEDIKIT -> Produksi SEDIKIT
-    a7 = min(pm_besar, ps_sedikit); z7 = Z_SEDIKIT
-    rules.append({"Rule": 7, "Alpha": a7, "Z": z7, "Ket": "Besar & Sedikit -> Sedikit"})
-    
-    # Rule 8: IF Minta BESAR & Sedia SEDANG -> Produksi SEDANG
-    a8 = min(pm_besar, ps_sedang); z8 = Z_SEDANG
-    rules.append({"Rule": 8, "Alpha": a8, "Z": z8, "Ket": "Besar & Sedang -> Sedang"})
-    
-    # Rule 9: IF Minta BESAR & Sedia BANYAK -> Produksi BANYAK
-    a9 = min(pm_besar, ps_banyak); z9 = Z_BANYAK
-    rules.append({"Rule": 9, "Alpha": a9, "Z": z9, "Ket": "Besar & Banyak -> Banyak"})
+    # Rule 7-9 (Minta BESAR)
+    rules.append({"Rule": 7, "Alpha": min(pm_besar, ps_sedikit), "Z": Z_SEDIKIT, "Ket": "Besar & Sedikit -> Sedikit"})
+    rules.append({"Rule": 8, "Alpha": min(pm_besar, ps_sedang), "Z": Z_SEDANG, "Ket": "Besar & Sedang -> Sedang"})
+    rules.append({"Rule": 9, "Alpha": min(pm_besar, ps_banyak), "Z": Z_BANYAK, "Ket": "Besar & Banyak -> Banyak"})
 
-    # 3. Defuzzifikasi (Weighted Average) [cite: 151]
+    # 3. Defuzzifikasi (Weighted Average)
     numerator = sum(r["Alpha"] * r["Z"] for r in rules)
     denominator = sum(r["Alpha"] for r in rules)
     
-    if denominator == 0:
-        result = 0 # Hindari pembagian dengan nol
-    else:
-        result = numerator / denominator
-        
-    return result, rules, (pm_kecil, pm_sedang, pm_besar), (ps_sedikit, ps_sedang, ps_banyak)
+    # Menghindari pembagian nol
+    result = numerator / denominator if denominator != 0 else 0
+    return result, rules
 
-# --- VISUALISASI GRAFIK ---
+# --- 6. FUNGSI GRAFIK ---
 def plot_graph(x_val, input_type):
     fig, ax = plt.subplots(figsize=(8, 3))
-    
     if input_type == "minta":
         x = np.linspace(700, 1800, 500)
-        y_kecil = trapmf(x, [778, 975, 1030, 1310])
-        y_sedang = trimf(x, [1030, 1310, 1589])
-        y_besar = trapmf(x, [1310, 1589, 1695, 1796])
-        ax.plot(x, y_kecil, label='Kecil', color='green')
-        ax.plot(x, y_sedang, label='Sedang', color='orange')
-        ax.plot(x, y_besar, label='Besar', color='red')
+        ax.plot(x, trapmf(x, [778, 975, 1030, 1310]), label='Kecil', color='green')
+        ax.plot(x, trimf(x, [1030, 1310, 1589]), label='Sedang', color='orange')
+        ax.plot(x, trapmf(x, [1310, 1589, 1695, 1796]), label='Besar', color='red')
         title = "Membership Function: Permintaan"
     else:
         x = np.linspace(400, 1100, 500)
-        y_sedikit = trapmf(x, [492, 588, 607, 750])
-        y_sedang = trimf(x, [607, 750, 894])
-        y_banyak = trapmf(x, [750, 894, 912, 1008])
-        ax.plot(x, y_sedikit, label='Sedikit', color='green')
-        ax.plot(x, y_sedang, label='Sedang', color='orange')
-        ax.plot(x, y_banyak, label='Banyak', color='red')
+        ax.plot(x, trapmf(x, [492, 588, 607, 750]), label='Sedikit', color='green')
+        ax.plot(x, trimf(x, [607, 750, 894]), label='Sedang', color='orange')
+        ax.plot(x, trapmf(x, [750, 894, 912, 1008]), label='Banyak', color='red')
         title = "Membership Function: Persediaan"
 
-    # Plot user input line
     ax.axvline(x=x_val, color='blue', linestyle='--', linewidth=2, label='Input Anda')
-    
-    ax.set_title(title)
-    ax.legend(loc='upper right')
-    ax.grid(True, linestyle=':', alpha=0.6)
-    ax.set_ylim(0, 1.1)
-    
-    # Hide top and right spines for cleaner look
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    
+    ax.set_title(title); ax.legend(); ax.grid(True, alpha=0.3)
+    # Hide top and right spines
+    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
     return fig
 
-# --- UI UTAMA ---
+# --- 7. UI UTAMA (User Interface) ---
 
-st.title("Prediksi Produksi Roti Ganda")
-st.markdown("Sistem Inferensi Fuzzy Metode Sugeno (Studi Kasus: PT Roti Ganda Siantar)")
-st.markdown("---")
+# SIDEBAR: KNOWLEDGE BASE
+with st.sidebar:
+    st.header("📚 Knowledge Base")
+    st.info("Sumber: Jurnal JPILKOM Hal. 72, Tabel 4")
+    st.markdown("""
+    **Aturan (Rules) Sistem:**
+    1. IF **Kecil** & **Sedikit** THEN **Sedikit**
+    2. IF **Kecil** & **Sedang** THEN **Sedikit**
+    3. IF **Kecil** & **Banyak** THEN **Sedikit**
+    4. IF **Sedang** & **Sedikit** THEN **Sedikit**
+    5. IF **Sedang** & **Sedang** THEN **Sedang**
+    6. IF **Sedang** & **Banyak** THEN **Sedang**
+    7. IF **Besar** & **Sedikit** THEN **Sedikit**
+    8. IF **Besar** & **Sedang** THEN **Sedang**
+    9. IF **Besar** & **Banyak** THEN **Banyak**
+    """)
+
+# JUDUL UTAMA
+st.title("🍞 Prediksi Produksi Roti Ganda")
+st.markdown("### Tugas UAS: Sistem Berbasis Pengetahuan")
+st.markdown("Implementasi Logika Fuzzy Metode Sugeno (Studi Kasus: PT Roti Ganda Siantar)")
+st.divider()
 
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Data Permintaan")
-    # Range input disesuaikan dengan domain pada paper [cite: 183]
-    input_minta = st.number_input("Jumlah Permintaan (Bungkus)", min_value=1030, max_value=1589, step=1)
-    st.caption("Range domain fuzzy: 1030 - 1589")
+    # --- RANGE INPUT AMAN SESUAI TABEL 3 ---
+    # Min: 1030, Max: 1589
+    input_minta = st.number_input(
+        "Jumlah Permintaan (Bungkus)", 
+        min_value=1030, max_value=1589, value=1030, step=1,
+        help="Range Data Tabel 3: 1030 - 1589"
+    )
 
 with col2:
     st.subheader("Data Persediaan")
-    # Range input disesuaikan dengan domain pada paper [cite: 183]
-    input_sedia = st.number_input("Jumlah Persediaan (Bungkus)", min_value=607, max_value=894, step=1)
-    st.caption("Range domain fuzzy: 607 - 894")
+    # --- RANGE INPUT AMAN SESUAI TABEL 3 ---
+    # Min: 607, Max: 894
+    input_sedia = st.number_input(
+        "Jumlah Persediaan (Bungkus)", 
+        min_value=607, max_value=894, value=607, step=1,
+        help="Range Data Tabel 3: 607 - 894"
+    )
 
-# Calculate
-hasil_produksi, rule_data, degrees_minta, degrees_sedia = calculate_fuzzy_sugeno(input_minta, input_sedia)
+# HITUNG
+hasil, data_rules = calculate_fuzzy_sugeno(input_minta, input_sedia)
 
+# TAMPILKAN HASIL
+st.markdown("---")
 st.markdown("### 🏭 Hasil Rekomendasi Produksi")
 st.markdown(f"""
 <div class="result-card">
-    <div class="result-value">{int(hasil_produksi)}</div>
-    <div class="result-label">Bungkus Roti</div>
+    <div class="result-label">Jumlah yang harus diproduksi:</div>
+    <!-- SUDAH DIPERBAIKI: PAKAI ROUND AGAR HASILNYA 1996 -->
+    <div class="result-value">{int(round(hasil))}</div>
+    <div class="result-label">Bungkus</div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- BAGIAN PENJELASAN (EXPANDER) ---
+# --- DETAIL STEP-BY-STEP (PAKAI TABS) ---
 with st.expander("🔍 Lihat Detail Perhitungan (Step-by-Step)"):
-    st.markdown("### 1. Fuzzifikasi (Input -> Derajat Keanggotaan)")
-    st.info("Rumus dipilih otomatis berdasarkan posisi nilai input pada grafik.")
+    tab1, tab2, tab3 = st.tabs(["1. Fuzzifikasi", "2. Inferensi", "3. Defuzzifikasi"])
     
-    # --- Detail Permintaan ---
-    st.markdown(f"#### A. Variabel Permintaan (Input: {input_minta})")
-    st.pyplot(plot_graph(input_minta, "minta"))
-    
-    # Menampilkan rumus untuk Kecil, Sedang, Besar
-    # Parameter harus sama persis dengan yang ada di fungsi fuzzify_permintaan
-    st.latex(get_formula_latex(input_minta, [778, 975, 1030, 1310], "Kecil"))
-    st.latex(get_formula_latex(input_minta, [1030, 1310, 1589], "Sedang"))
-    st.latex(get_formula_latex(input_minta, [1310, 1589, 1695, 1796], "Besar"))
-    
-    st.markdown("---")
-    
-    # --- Detail Persediaan ---
-    st.markdown(f"#### B. Variabel Persediaan (Input: {input_sedia})")
-    st.pyplot(plot_graph(input_sedia, "sedia"))
-    
-    # Menampilkan rumus untuk Sedikit, Sedang, Banyak
-    # Parameter harus sama persis dengan yang ada di fungsi fuzzify_persediaan
-    st.latex(get_formula_latex(input_sedia, [492, 588, 607, 750], "Sedikit"))
-    st.latex(get_formula_latex(input_sedia, [607, 750, 894], "Sedang"))
-    st.latex(get_formula_latex(input_sedia, [750, 894, 912, 1008], "Banyak"))
-    
-    
-    st.markdown("---")
-    st.markdown("### 2. Inferensi (Evaluasi Aturan)")
-    st.write("Menggunakan operator **MIN** untuk mendapatkan nilai α-predikat (Alpha) setiap aturan.")
-    st.write("Nilai Z adalah konstanta Output Sugeno: **Sedikit=1996, Sedang=2275, Banyak=2579**.")
-    
-    # Tampilkan Tabel Aturan
-    df_rules = pd.DataFrame(rule_data)
-    # Highlight row where Alpha > 0
-    def highlight_active(s):
-        return ['background-color: #e6f3ff' if v > 0 else '' for v in s]
-    
-    st.dataframe(df_rules.style.apply(highlight_active, subset=['Alpha'], axis=0), use_container_width=True)
+    with tab1:
+        st.markdown("### 1. Fuzzifikasi (Input -> Derajat Keanggotaan)")
+        st.info("Rumus dipilih otomatis berdasarkan posisi nilai input pada grafik.")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f"**A. Permintaan: {input_minta}**")
+            st.pyplot(plot_graph(input_minta, "minta"))
+            st.latex(get_formula_latex(input_minta, [778, 975, 1030, 1310], "Kecil"))
+            st.latex(get_formula_latex(input_minta, [1030, 1310, 1589], "Sedang"))
+            st.latex(get_formula_latex(input_minta, [1310, 1589, 1695, 1796], "Besar"))
+        with c2:
+            st.markdown(f"**B. Persediaan: {input_sedia}**")
+            st.pyplot(plot_graph(input_sedia, "sedia"))
+            st.latex(get_formula_latex(input_sedia, [492, 588, 607, 750], "Sedikit"))
+            st.latex(get_formula_latex(input_sedia, [607, 750, 894], "Sedang"))
+            st.latex(get_formula_latex(input_sedia, [750, 894, 912, 1008], "Banyak"))
 
-    st.markdown("---")
-    st.markdown("### 3. Defuzzifikasi (Weighted Average)")
-    st.write("Menghitung rata-rata tertimbang. Hanya rule dengan nilai α > 0 yang dimasukkan ke dalam perhitungan.")
+    with tab2:
+        st.markdown("### 2. Inferensi (Evaluasi Aturan)")
+        st.write("Menggunakan operator **MIN** untuk mendapatkan nilai Alpha.")
+        st.write("Nilai Z adalah konstanta Output Sugeno: **Sedikit=1996, Sedang=2275, Banyak=2579**.")
+        
+        df_rules = pd.DataFrame(data_rules)
+        # Highlight rules yang aktif
+        st.dataframe(df_rules.style.highlight_max(axis=0, subset=['Alpha'], color='#d1e7dd'), use_container_width=True)
     
-    # Filter hanya rule yang memiliki alpha > 0 untuk ditampilkan di rumus
-    active_rules = [r for r in rule_data if r["Alpha"] > 0]
-    
-    if len(active_rules) > 0:
-        # 1. Membuat String Rumus Bagian Atas (Pembilang) -> (Alpha * Z) + ...
-        # Format: (0.25 * 1996) + (0.40 * 2275)
-        numerator_str = " + ".join([f"({r['Alpha']:.3f} \\times {r['Z']})" for r in active_rules])
+    with tab3:
+        st.markdown("### 3. Defuzzifikasi (Weighted Average)")
+        st.write("Menghitung rata-rata tertimbang. Hanya rule dengan nilai **α > 0** yang dimasukkan ke dalam perhitungan.")
+        active_rules = [r for r in data_rules if r["Alpha"] > 0]
         
-        # 2. Membuat String Rumus Bagian Bawah (Penyebut) -> Alpha + ...
-        # Format: 0.25 + 0.40
-        denominator_str = " + ".join([f"{r['Alpha']:.3f}" for r in active_rules])
-        
-        # 3. Tampilkan Rumus Lengkap dengan Angka Asli
-        st.markdown("**Detail Substitusi Nilai:**")
-        st.latex(f"Produksi = \\frac{{{numerator_str}}}{{{denominator_str}}}")
-        
-        # 4. Tampilkan Hasil Kalkulasi Antara
-        numerator_val = sum(r["Alpha"] * r["Z"] for r in active_rules)
-        denominator_val = sum(r["Alpha"] for r in active_rules)
-        
-        st.latex(f"Produksi = \\frac{{{numerator_val:.4f}}}{{{denominator_val:.4f}}} = \\mathbf{{{numerator_val / denominator_val:.4f}}}")
-        
-    else:
-        st.warning("⚠️ Tidak ada rule yang aktif (Total Alpha = 0). Input mungkin berada di luar jangkauan fuzzy yang didefinisikan.")
-        st.latex(r"Produksi = 0")
+        if active_rules:
+            num_str = " + ".join([f"({r['Alpha']:.3f} \\times {r['Z']})" for r in active_rules])
+            den_str = " + ".join([f"{r['Alpha']:.3f}" for r in active_rules])
+            numerator = sum(r["Alpha"] * r["Z"] for r in active_rules)
+            denominator = sum(r["Alpha"] for r in active_rules)
+            
+            st.markdown("**Detail Substitusi Nilai:**")
+            st.latex(f"Z = \\frac{{{num_str}}}{{{den_str}}}")
+            st.latex(f"Z = \\frac{{{numerator:.4f}}}{{{denominator:.4f}}} = \\mathbf{{{hasil:.4f}}}")
+        else:
+            st.error("Nilai input di luar jangkauan fuzzy.")
