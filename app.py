@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(
     page_title="Sistem Fuzzy Sugeno - Roti Ganda",
     page_icon="🍞",
-    layout="wide" # Layout lebar agar grafik terlihat jelas
+    layout="wide"
 )
 
 # --- 2. CSS UNTUK PERCANTIK TAMPILAN ---
@@ -45,50 +45,53 @@ def trimf(x, p):
     return np.maximum(0, np.minimum((x - p[0]) / (p[1] - p[0]), (p[2] - x) / (p[2] - p[1])))
 
 # --- 4. DEFINISI VARIABEL (FUZZIFIKASI) ---
-# Parameter diambil persis dari Paper Halaman 6-7
 
 def fuzzify_permintaan(x):
-    # KECIL: Trapmf [778, 975, 1030, 1310]
     u_kecil = trapmf(x, [778, 975, 1030, 1310])
-    # SEDANG: Trimf [1030, 1310, 1589]
     u_sedang = trimf(x, [1030, 1310, 1589])
-    # BESAR: Trapmf [1310, 1589, 1695, 1796]
     u_besar = trapmf(x, [1310, 1589, 1695, 1796])
     return u_kecil, u_sedang, u_besar
 
 def fuzzify_persediaan(x):
-    # SEDIKIT: Trapmf [492, 588, 607, 750]
     u_sedikit = trapmf(x, [492, 588, 607, 750])
-    # SEDANG: Trimf [607, 750, 894]
     u_sedang = trimf(x, [607, 750, 894])
-    # BANYAK: Trapmf [750, 894, 912, 1008]
     u_banyak = trapmf(x, [750, 894, 912, 1008])
     return u_sedikit, u_sedang, u_banyak
 
-# Fungsi Bantuan: Membuat Rumus LaTeX untuk Penjelasan (LENGKAP)
+# [PERBAIKAN 1] Mengembalikan Fungsi Formula Detail
 def get_formula_latex(x, p, label):
-    if len(p) == 4: # Trapesium
+    """
+    Menghasilkan string LaTeX detail: Rumus -> Substitusi -> Hasil
+    """
+    # Cek Trapesium (4 parameter)
+    if len(p) == 4:
         a, b, c, d = p
-        if x <= a or x >= d: 
-            return f"\\mu_{{{label}}} = 0 \\quad \\text{{(Di luar range)}}"
-        elif b <= x <= c: 
-            return f"\\mu_{{{label}}} = 1 \\quad \\text{{(Di area puncak)}}"
-        elif a < x < b: 
-            return f"\\mu_{{{label}}} = {(x-a)/(b-a):.4f} \\quad \\text{{(Lereng Naik)}}"
-        elif c < x < d: 
-            return f"\\mu_{{{label}}} = {(d-x)/(d-c):.4f} \\quad \\text{{(Lereng Turun)}}"
+        if x <= a or x >= d:
+            return f"\\mu_{{{label}}}({x}) = 0 \\quad \\text{{(Di luar range)}}"
+        elif b <= x <= c:
+            return f"\\mu_{{{label}}}({x}) = 1 \\quad \\text{{(Di area puncak)}}"
+        elif a < x < b:
+            val = (x - a) / (b - a)
+            return f"\\mu_{{{label}}}({x}) = \\frac{{x - {a}}}{{{b} - {a}}} = \\frac{{{x - a}}}{{{b - a}}} = {val:.4f}"
+        elif c < x < d:
+            val = (d - x) / (d - c)
+            return f"\\mu_{{{label}}}({x}) = \\frac{{{d} - x}}{{{d} - {c}}} = \\frac{{{d - x}}}{{{d - c}}} = {val:.4f}"
             
-    elif len(p) == 3: # Segitiga
+    # Cek Segitiga (3 parameter)
+    elif len(p) == 3:
         a, b, c = p
-        if x <= a or x >= c: 
-            return f"\\mu_{{{label}}} = 0 \\quad \\text{{(Di luar range)}}"
-        elif x == b: 
-            return f"\\mu_{{{label}}} = 1 \\quad \\text{{(Tepat di puncak)}}"
-        elif a < x < b: 
-            return f"\\mu_{{{label}}} = {(x-a)/(b-a):.4f} \\quad \\text{{(Lereng Naik)}}"
-        elif b < x < c: 
-            return f"\\mu_{{{label}}} = {(c-x)/(c-b):.4f} \\quad \\text{{(Lereng Turun)}}"
-    return "Error"
+        if x <= a or x >= c:
+            return f"\\mu_{{{label}}}({x}) = 0 \\quad \\text{{(Di luar range)}}"
+        elif x == b:
+            return f"\\mu_{{{label}}}({x}) = 1 \\quad \\text{{(Tepat di puncak)}}"
+        elif a < x < b:
+            val = (x - a) / (b - a)
+            return f"\\mu_{{{label}}}({x}) = \\frac{{x - {a}}}{{{b} - {a}}} = \\frac{{{x - a}}}{{{b - a}}} = {val:.4f}"
+        elif b < x < c:
+            val = (c - x) / (c - b)
+            return f"\\mu_{{{label}}}({x}) = \\frac{{{c} - x}}{{{c} - {b}}} = \\frac{{{c - x}}}{{{c - b}}} = {val:.4f}"
+            
+    return "Error parsing formula"
 
 # Konstanta Output Sugeno
 Z_SEDIKIT = 1996
@@ -145,13 +148,12 @@ def plot_graph(x_val, input_type):
 
     ax.axvline(x=x_val, color='blue', linestyle='--', linewidth=2, label='Input Anda')
     ax.set_title(title); ax.legend(); ax.grid(True, alpha=0.3)
-    # Hide top and right spines
     ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
     return fig
 
-# --- 7. UI UTAMA (User Interface) ---
+# --- 7. UI UTAMA ---
 
-# SIDEBAR: KNOWLEDGE BASE
+# SIDEBAR
 with st.sidebar:
     st.header("📚 Knowledge Base")
     st.info("Sumber: Jurnal JPILKOM Hal. 72, Tabel 4")
@@ -178,8 +180,6 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Data Permintaan")
-    # --- RANGE INPUT AMAN SESUAI TABEL 3 ---
-    # Min: 1030, Max: 1589
     input_minta = st.number_input(
         "Jumlah Permintaan (Bungkus)", 
         min_value=1030, max_value=1589, value=1030, step=1,
@@ -188,8 +188,6 @@ with col1:
 
 with col2:
     st.subheader("Data Persediaan")
-    # --- RANGE INPUT AMAN SESUAI TABEL 3 ---
-    # Min: 607, Max: 894
     input_sedia = st.number_input(
         "Jumlah Persediaan (Bungkus)", 
         min_value=607, max_value=894, value=607, step=1,
@@ -205,13 +203,12 @@ st.markdown("### 🏭 Hasil Rekomendasi Produksi")
 st.markdown(f"""
 <div class="result-card">
     <div class="result-label">Jumlah yang harus diproduksi:</div>
-    <!-- SUDAH DIPERBAIKI: PAKAI ROUND AGAR HASILNYA 1996 -->
     <div class="result-value">{int(round(hasil))}</div>
     <div class="result-label">Bungkus</div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- DETAIL STEP-BY-STEP (PAKAI TABS) ---
+# --- DETAIL STEP-BY-STEP (TABS) ---
 with st.expander("🔍 Lihat Detail Perhitungan (Step-by-Step)"):
     tab1, tab2, tab3 = st.tabs(["1. Fuzzifikasi", "2. Inferensi", "3. Defuzzifikasi"])
     
@@ -223,12 +220,14 @@ with st.expander("🔍 Lihat Detail Perhitungan (Step-by-Step)"):
         with c1:
             st.markdown(f"**A. Permintaan: {input_minta}**")
             st.pyplot(plot_graph(input_minta, "minta"))
+            # Menampilkan rumus LaTeX yang sudah diperbaiki
             st.latex(get_formula_latex(input_minta, [778, 975, 1030, 1310], "Kecil"))
             st.latex(get_formula_latex(input_minta, [1030, 1310, 1589], "Sedang"))
             st.latex(get_formula_latex(input_minta, [1310, 1589, 1695, 1796], "Besar"))
         with c2:
             st.markdown(f"**B. Persediaan: {input_sedia}**")
             st.pyplot(plot_graph(input_sedia, "sedia"))
+            # Menampilkan rumus LaTeX yang sudah diperbaiki
             st.latex(get_formula_latex(input_sedia, [492, 588, 607, 750], "Sedikit"))
             st.latex(get_formula_latex(input_sedia, [607, 750, 894], "Sedang"))
             st.latex(get_formula_latex(input_sedia, [750, 894, 912, 1008], "Banyak"))
@@ -236,11 +235,20 @@ with st.expander("🔍 Lihat Detail Perhitungan (Step-by-Step)"):
     with tab2:
         st.markdown("### 2. Inferensi (Evaluasi Aturan)")
         st.write("Menggunakan operator **MIN** untuk mendapatkan nilai Alpha.")
-        st.write("Nilai Z adalah konstanta Output Sugeno: **Sedikit=1996, Sedang=2275, Banyak=2579**.")
         
         df_rules = pd.DataFrame(data_rules)
-        # Highlight rules yang aktif
-        st.dataframe(df_rules.style.highlight_max(axis=0, subset=['Alpha'], color='#d1e7dd'), use_container_width=True)
+        
+        # [PERBAIKAN: Highlight Sebaris Penuh]
+        # Fungsi ini menerima satu baris data (Series)
+        # Jika nilai 'Alpha' di baris tersebut > 0, warnai seluruh kolom hijau.
+        def highlight_active_rows(row):
+            if row["Alpha"] > 0:
+                return ['background-color: #d1e7dd'] * len(row)
+            else:
+                return [''] * len(row)
+
+        # Gunakan axis=1 agar fungsi diaplikasikan per baris
+        st.dataframe(df_rules.style.apply(highlight_active_rows, axis=1), use_container_width=True)
     
     with tab3:
         st.markdown("### 3. Defuzzifikasi (Weighted Average)")
